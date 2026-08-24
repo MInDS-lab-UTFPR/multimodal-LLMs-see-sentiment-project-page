@@ -1,0 +1,488 @@
+---
+title: Multimodal LLMs See Sentiment
+theme: device
+favicon: favicon.svg
+description: Do multimodal LLMs understand the sentiment of an image, or only its contents? A systematic study of description-mediated visual sentiment analysis.
+thumbnail: thumbnail.png
+---
+
+import Header from "./components/Header.astro";
+import HighlightedSection from "./components/HighlightedSection.astro";
+import Figure from "./components/Figure.astro";
+import Picture from "./components/Picture.astro";
+import TwoColumns from "./components/TwoColumns.astro";
+import Wide from "./components/Wide.astro";
+import SmallCaps from "./components/SmallCaps.astro";
+import Stats from "./components/Stats.astro";
+import BaselineChart from "./components/BaselineChart.astro";
+import CueRow from "./components/CueRow.astro";
+import CaseCard from "./components/CaseCard.astro";
+
+import architecture from "@/assets/architecture.png";
+import perceptsentSample from "@/assets/perceptsent-sample.png";
+import deepsentSample from "@/assets/deepsent-sample.jpg";
+import mllmDescriptions from "@/assets/mllm-descriptions.png";
+import cueWaterfall from "@/assets/cue-waterfall.jpeg";
+import cueGarbage from "@/assets/cue-garbage.jpeg";
+import cueKayak from "@/assets/cue-kayak.jpeg";
+import cueDisaster from "@/assets/cue-disaster.jpeg";
+import cueCity from "@/assets/cue-city.jpeg";
+import caseDog from "@/assets/case-dog.png";
+import caseLamb from "@/assets/case-lamb.png";
+import caseFarm from "@/assets/case-farm.png";
+import caseTrain from "@/assets/case-train.png";
+
+<Header
+  title="Multimodal LLMs See Sentiment"
+  authors={[
+    {
+      name: "Neemias B. da Silva",
+      url: "https://github.com/neemiasbsilva",
+      notes: ["1", "*"],
+    },
+    { name: "John Harrison", notes: ["1"] },
+    { name: "Rodrigo Minetto", notes: ["1"] },
+    { name: "Myriam R. Delgado", notes: ["1"] },
+    { name: "Bogdan T. Nassu", notes: ["1"] },
+    { name: "Thiago H. Silva", notes: ["2"] },
+  ]}
+  notes={[
+    { symbol: "1", text: "Federal University of Technology – Paraná (UTFPR), Curitiba, Brazil" },
+    { symbol: "2", text: "University of Toronto, Toronto, Canada" },
+    { symbol: "*", text: "corresponding author" },
+  ]}
+  links={[
+    { name: "Paper", url: "https://arxiv.org/pdf/2508.16873", icon: "ri:file-pdf-2-line" },
+    { name: "arXiv", url: "https://arxiv.org/abs/2508.16873", icon: "academicons:arxiv" },
+    { name: "Code", url: "https://github.com/neemiasbsilva/multimodal-LLMs-see-sentiment", icon: "ri:github-line" },
+    { name: "Dataset", url: "https://huggingface.co/datasets/Neemias/multimodal-LLMs-See-Sentiment", icon: "ri:database-2-line" },
+    { name: "Models", url: "https://huggingface.co/Neemias/multimodal-LLMs-See-Sentiment", icon: "ri:box-3-line" },
+  ]}
+/>
+
+<HighlightedSection>
+
+## Abstract
+
+Understanding how visual content conveys sentiment is increasingly important in a digital landscape dominated by imagery. However, sentiment perception depends on complex scene-level semantics, making this a challenging task for computational models. This paper examines how Multimodal Large Language Models (MLLMs) perform sentiment analysis in images through a systematic, evaluation-driven study encompassing three perspectives: (i) direct sentiment classification from images using MLLMs; (ii) sentiment analysis on MLLM-generated descriptions using pre-trained LLMs; and (iii) fine-tuning these LLMs on sentiment-labeled descriptions to assess performance and generalization. Experiments on a recent benchmark show that a two-stage MLLM description-mediated pipeline can substantially improve prediction accuracy under several evaluation settings, particularly when the LLM component is fine-tuned. Across different agreement thresholds and sentiment granularities, the strongest configurations of this pipeline outperform lexicon-, CNN-, and Transformer-based baselines in our benchmark by up to 30.9%, 64.8%, and 42.4%, respectively. In cross-dataset evaluation, the proposed pipeline — without training or fine-tuning on the target dataset — still surpasses the best in-domain baseline by over 8%. Overall, the study provides a comprehensive assessment of MLLM description-mediated sentiment analysis, clarifying the conditions under which it is effective, the scenarios in which it fails, and its comparison with traditional vision-based approaches, while also providing a reproducible benchmark resource for future research.
+
+</HighlightedSection>
+
+## The short version
+
+Ask a multimodal LLM "what is the sentiment of this image?" and it does *worse* than if you
+ask it "describe this image" and hand the description to a text classifier. Describing the
+scene externalises the perceptual cues — decay, isolation, leisure, neglect — that a
+vision-only classifier has to infer from pixels, and that annotators actually cite when
+they justify their own sentiment judgments.
+
+<Stats
+  items={[
+    {
+      value: "95.8",
+      label: "F-score on PerceptSent ⟨σ₅, P₃⟩",
+      note: "GPT-4o mini descriptions + fine-tuned ModernBERT",
+    },
+    {
+      value: "+64.8%",
+      label: "over the ResNet CNN baseline",
+      note: "relative, at ⟨σ₅, P₅⟩",
+    },
+    {
+      value: "95.6",
+      label: "accuracy on DeepSent ⟨σ₅, P₂⟩",
+      note: "zero training on the target dataset",
+    },
+    {
+      value: "141",
+      label: "experiments released",
+      note: "descriptions, checkpoints and per-fold results",
+    },
+  ]}
+/>
+
+## How it works
+
+The framework separates two ways of getting a sentiment label out of an image.
+
+**Task 1 — direct classification.** The MLLM is shown the image and asked for a label,
+nothing else:
+
+> *Analyze this image, and classify it as \{𝓛\} sentiments, do not describe the image, and select only one class.*
+
+**Task 2 — the description-mediated pipeline.** The MLLM is instead asked only to *look*:
+
+> *Describe this image in details.*
+
+The resulting text is then classified by a text-only LLM — either straight out of the box
+(**Task 2a**, pre-trained, only a task head added) or after fine-tuning on
+sentiment-labeled descriptions (**Task 2b**). The best configuration of this pipeline —
+GPT-4o mini descriptions classified by a fine-tuned ModernBERT — is what we call
+**MLLMsent**.
+
+<Figure>
+  <Picture slot="figure" src={architecture} alt="Architecture diagram: an input image and a prompt go into a multimodal LLM. Task 1 sends the image straight to image classification. Task 2 first produces an image description, which is then classified by either a pre-trained or a fine-tuned text-only LLM. All three paths output a sentiment polarity." />
+  <Fragment slot="caption">The evaluation framework. Task 1 asks the MLLM for the label directly; Task 2 (hatched) routes it through a textual description first. Figure from the paper; images within it come from PerceptSent, licensed CC BY 4.0.</Fragment>
+</Figure>
+
+<TwoColumns>
+<Fragment slot="left">
+
+**Multimodal LLMs (the describers)**
+
+- **MiniGPT-4** — open source, Vicuna-7B + BLIP-2 vision stack
+- **GPT-4o mini** — proprietary, accessed as a cloud API
+- **DeepSeek-VL2-Tiny** — open weights, 3B MoE with 1B active
+
+</Fragment>
+<Fragment slot="right">
+
+**Text-only LLMs (the classifiers)**
+
+- **BART-large-MNLI** — seq2seq denoising autoencoder
+- **ModernBERT** — encoder-only, 8,192-token context
+- **LLaMA-3** — decoder-only; few-shot for 2a, qLoRA for 2b
+
+</Fragment>
+</TwoColumns>
+
+## The benchmark
+
+Experiments use [**PerceptSent**](https://github.com/ceslop84/perceptsent) (5,000 images from Instagram, Flickr and NYC311, 92.7%
+outdoor) as the in-domain benchmark, and **DeepSent** (1,269 images from X) for
+cross-dataset transfer. Every image carries five independent annotator votes.
+
+<Figure>
+  <TwoColumns slot="figure">
+    <Picture slot="left" src={perceptsentSample} alt="A PerceptSent sample: a dog and a statue in a garden, with human perception tags such as animals, nature and morbid, and a five-slot sentiment vote vector reading 3-1-0-1-0." />
+    <Picture slot="right" src={deepsentSample} alt="A DeepSent sample: a squirrel eating on a garden table, with a two-slot sentiment vote vector reading 3 positive, 2 negative." />
+  </TwoColumns>
+  <Fragment slot="caption">Samples from **(left)** PerceptSent and **(right)** DeepSent with their annotator vote vectors. PerceptSent also carries human *perception tags* explaining how annotators reached their judgment; DeepSent does not, which lets us test description-mediated reasoning with and without explicit perceptual cues. Figure from the paper. PerceptSent image CC BY 4.0; DeepSent image MIT.</Fragment>
+</Figure>
+
+Two axes run through every experiment:
+
+- **$\sigma_l$ — annotator agreement.** How many of the five evaluators had to agree for an image
+  to be kept. **σ₃** is *simple dominance*, **σ₅** is *absolute dominance*. Raising the
+  threshold shrinks the set but cleans it.
+- **$P_C$ — label granularity.** **P₅** keeps all five categories (positive, slightly
+  positive, neutral, slightly negative, negative); **P₃** merges the "slightly" classes
+  into their poles; **P₂** is binary, used only for DeepSent.
+
+| Dataset | ⟨σ₃, P₅⟩ | ⟨σ₃, P₃⟩ | ⟨σ₅, P₅⟩ | ⟨σ₅, P₃⟩ | ⟨σ₃, P₂⟩ | ⟨σ₅, P₂⟩ |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| PerceptSent | 3,566 | 4,506 | 446 | 1,680 | — | — |
+| DeepSent | — | — | — | — | 1,269 | 882 |
+
+## Results
+
+Mean $F$-score over stratified 5-fold cross-validation, ± 95% confidence interval. **Task 1**
+is the MLLM classifying the image directly; **Task 2a** and **Task 2b** classify that same
+MLLM's description with a pre-trained and a fine-tuned text LLM respectively. Bold marks the
+best cell per task within each setup. MiniGPT-4 has no Task 1 entry: prompted for a label
+alone, it kept describing the image instead.
+
+| Setup | MLLM | Task 1 image | BART 2a | BART 2b | MBERT 2a | MBERT 2b | LLAMA 2a | LLAMA 2b |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| ⟨σ₃, P₅⟩ | MiniGPT-4 | — | 36.5 ±2.6 | 48.0 ±2.6 | 43.4 ±1.1 | 51.2 ±1.6 | 24.4 ±3.7 | 49.5 ±2.9 |
+| ⟨σ₃, P₅⟩ | GPT-4o mini | **44.5** ±3.1 | 40.1 ±3.0 | 56.1 ±2.5 | **47.9** ±2.3 | **58.4** ±4.0 | 33.3 ±6.3 | 56.9 ±2.9 |
+| ⟨σ₃, P₅⟩ | DeepSeek-VL2 | 26.6 ±1.9 | 34.6 ±3.0 | 52.2 ±2.5 | 38.2 ±1.7 | 50.5 ±1.4 | 25.3 ±9.0 | 51.0 ±2.4 |
+| ⟨σ₃, P₃⟩ | MiniGPT-4 | — | 59.4 ±1.7 | 68.7 ±2.1 | 62.1 ±8.9 | 69.8 ±1.7 | 30.3 ±11.1 | 70.9 ±2.6 |
+| ⟨σ₃, P₃⟩ | GPT-4o mini | **61.2** ±2.9 | 64.9 ±2.4 | 76.0 ±0.7 | **66.6** ±6.1 | **77.5** ±0.9 | 46.6 ±14.0 | 76.7 ±1.7 |
+| ⟨σ₃, P₃⟩ | DeepSeek-VL2 | 44.0 ±0.2 | 57.2 ±1.5 | 71.1 ±1.2 | 60.6 ±5.2 | 71.1 ±1.6 | 46.6 ±7.5 | 72.9 ±3.5 |
+| ⟨σ₅, P₅⟩ | MiniGPT-4 | — | 54.1 ±4.5 | 80.1 ±3.3 | 65.4 ±3.5 | 75.7 ±4.8 | 67.4 ±3.8 | 68.8 ±4.0 |
+| ⟨σ₅, P₅⟩ | GPT-4o mini | **75.8** ±4.7 | 60.6 ±6.1 | 82.4 ±5.6 | 72.2 ±4.4 | **84.4** ±4.2 | **78.2** ±6.6 | 81.4 ±4.7 |
+| ⟨σ₅, P₅⟩ | DeepSeek-VL2 | 60.7 ±6.9 | 57.3 ±4.0 | 83.0 ±4.6 | 61.3 ±6.1 | 74.8 ±5.6 | 58.4 ±1.4 | 69.8 ±2.3 |
+| ⟨σ₅, P₃⟩ | MiniGPT-4 | — | 78.7 ±3.6 | 89.7 ±0.8 | 84.1 ±1.4 | 90.4 ±1.6 | 82.3 ±2.0 | 87.7 ±2.1 |
+| ⟨σ₅, P₃⟩ | GPT-4o mini | **87.7** ±1.8 | 85.4 ±1.8 | 95.3 ±1.6 | **90.6** ±1.5 | **95.8** ±0.9 | 85.5 ±6.1 | 91.3 ±1.1 |
+| ⟨σ₅, P₃⟩ | DeepSeek-VL2 | 85.8 ±1.6 | 73.2 ±2.1 | 91.9 ±0.9 | 79.2 ±2.7 | 89.5 ±1.3 | 77.6 ±1.0 | 88.6 ±1.4 |
+
+Three things fall out of this table:
+
+1. **Describing beats classifying.** In every setup, the best Task 2b cell beats the best
+   Task 1 cell — by 13.9 points at ⟨σ₃, P₅⟩ and still 8.1 points at ⟨σ₅, P₃⟩, where direct
+   classification is already strong.
+2. **Fine-tuning is what unlocks it.** Pre-trained classifiers on descriptions (Task 2a)
+   are only sometimes better than asking the MLLM directly. Fine-tuned ones (Task 2b) are
+   better everywhere.
+3. **Consensus matters more than granularity.** GPT-4o mini + ModernBERT at P₅ goes from
+   47.9 at σ₃ to 72.2 at σ₅ — a 50.7% relative gain — while collapsing P₅ into P₃ helps
+   less.
+
+### What the models actually see
+
+The gap between MLLMs is a gap in description quality, not in classification skill.
+
+<Figure>
+  <Picture slot="figure" src={mllmDescriptions} alt="Two PerceptSent images alongside the descriptions produced for them by MiniGPT-4, GPT-4o mini and DeepSeek. GPT-4o mini's descriptions are longest and identify contextual detail the others miss." />
+  <Fragment slot="caption">Descriptions of two PerceptSent images. For the top image, MiniGPT-4 misses the squirrel on the bin and hallucinates cars driving on the street; DeepSeek finds the squirrel but degenerates into "a and a fence fence fence". For the bottom image, only GPT-4o mini identifies the person sitting on the ground asking for help — the very cue human annotators labelled *beggar* and *poverty*. Figure from the paper; PerceptSent images CC BY 4.0, faces blurred.</Fragment>
+</Figure>
+
+### Against the baselines
+
+MLLMsent is compared against VADER (lexicon-based, run on the same MLLM descriptions), a
+ResNet CNN, and a Swin Transformer — the last two operating directly on pixels. VADER is
+only applicable to the three-class setups, since its rules produce negative / neutral /
+positive and nothing finer.
+
+<Wide>
+<BaselineChart
+  panels={[
+    {
+      setup: "(a)  ⟨σ₃, P₅⟩",
+      bars: [
+        { label: "ResNet CNN", value: 45.0, ci: 3.4 },
+        { label: "Swin Transformer", value: 41.01, ci: 2.7 },
+        { label: "MLLMsent", value: 58.4, ci: 4.0, ours: true },
+      ],
+    },
+    {
+      setup: "(b)  ⟨σ₃, P₃⟩",
+      bars: [
+        { label: "VADER", value: 59.19, ci: 1.27 },
+        { label: "ResNet CNN", value: 61.0, ci: 5.3 },
+        { label: "Swin Transformer", value: 59.51, ci: 5.0 },
+        { label: "MLLMsent", value: 77.5, ci: 0.9, ours: true },
+      ],
+    },
+    {
+      setup: "(c)  ⟨σ₅, P₅⟩",
+      bars: [
+        { label: "ResNet CNN", value: 51.2, ci: 6.3 },
+        { label: "Swin Transformer", value: 64.33, ci: 4.8 },
+        { label: "MLLMsent", value: 84.4, ci: 4.2, ours: true },
+      ],
+    },
+    {
+      setup: "(d)  ⟨σ₅, P₃⟩",
+      bars: [
+        { label: "VADER", value: 82.21, ci: 1.69 },
+        { label: "ResNet CNN", value: 69.0, ci: 4.7 },
+        { label: "Swin Transformer", value: 79.2, ci: 2.7 },
+        { label: "MLLMsent", value: 95.8, ci: 0.9, ours: true },
+      ],
+    },
+  ]}
+>
+  <Fragment slot="caption">$F$-score on PerceptSent. VADER is evaluated only on the $P_3$ setups. ResNet CNN results are the architecture reported by Lopes et al.; the Swin Transformer was adapted for this work.</Fragment>
+</BaselineChart>
+</Wide>
+
+The margins in the abstract come from the widest of these gaps: **+30.9%** over VADER
+(77.5 vs 59.19 at ⟨σ₃, P₃⟩), **+64.8%** over the ResNet CNN (84.4 vs 51.2 at ⟨σ₅, P₅⟩), and
+**+42.4%** over the Swin Transformer (58.4 vs 41.01 at ⟨σ₃, P₅⟩). A post-hoc analysis —
+paired $t$-tests over the five folds for Swin and VADER, a Welch-type comparison for ResNet,
+all Holm–Bonferroni corrected across the 10 comparisons — puts MLLMsent significantly ahead
+in every applicable configuration ($p_\text{Holm} \le 0.0012$).
+
+VADER is the interesting baseline here. A rule-based lexicon from 2014, given nothing but a
+good description, matches ResNet and Swin at ⟨σ₃, P₃⟩ and beats both at ⟨σ₅, P₃⟩. That is
+less a statement about VADER than about the descriptions.
+
+### Cross-dataset transfer
+
+The strongest test: train on PerceptSent, evaluate on DeepSent, and never let the model see
+a DeepSent image. Every baseline below was trained *and* validated in-domain on DeepSent.
+
+| Setup | Method | Accuracy |
+| :--- | :--- | :---: |
+| ⟨σ₃, P₂⟩ | GCH | 66.0 ±0.0 |
+| ⟨σ₃, P₂⟩ | LCH | 66.4 ±0.0 |
+| ⟨σ₃, P₂⟩ | You et al. | 68.7 ±0 |
+| ⟨σ₃, P₂⟩ | Campos et al. | 74.9 ±0.04 |
+| ⟨σ₃, P₂⟩ | VGG16 | 76.5 ±3.7 |
+| ⟨σ₃, P₂⟩ | InceptionV3 | 79.6 ±1.8 |
+| ⟨σ₃, P₂⟩ | DenseNet169 | 81.4 ±1.4 |
+| ⟨σ₃, P₂⟩ | ResNet50 | 81.5 ±1.0 |
+| ⟨σ₃, P₂⟩ | **MLLMsent** *(no target-domain training)* | **88.0** ±0.7 |
+| ⟨σ₅, P₂⟩ | GCH | 68.4 ±0.0 |
+| ⟨σ₅, P₂⟩ | LCH | 71.0 ±0.0 |
+| ⟨σ₅, P₂⟩ | You et al. | 74.7 ±0 |
+| ⟨σ₅, P₂⟩ | VGG16 | 79.4 ±3.4 |
+| ⟨σ₅, P₂⟩ | Campos et al. | 83.0 ±0.03 |
+| ⟨σ₅, P₂⟩ | ResNet50 | 86.5 ±3.1 |
+| ⟨σ₅, P₂⟩ | InceptionV3 | 87.7 ±1.4 |
+| ⟨σ₅, P₂⟩ | DenseNet169 | 88.3 ±1.6 |
+| ⟨σ₅, P₂⟩ | **MLLMsent** *(no target-domain training)* | **95.6** ±0.9 |
+
+<Wide>
+<div class="not-prose grid grid-cols-2 gap-6 lg:grid-cols-4">
+  <CaseCard src={caseDog} alt="A large dog standing behind a metal gate on a bare dirt yard." truth="Negative" baselineName="Campos et al." baseline="Positive" ours="Negative" />
+  <CaseCard src={caseLamb} alt="A lamb standing on grey rocks on a mountainside." truth="Positive" baselineName="Campos et al." baseline="Negative" ours="Positive" />
+  <CaseCard src={caseFarm} alt="Two children leading a horse across a farmyard, overlaid with the caption about wanting to be a farmer." truth="Positive" baselineName="Campos et al." baseline="Negative" ours="Positive" />
+  <CaseCard src={caseTrain} alt="A blue steam locomotive emerging from a tunnel under a stone bridge, trailing thick white steam." truth="Positive" baselineName="Oliveira et al." baseline="Negative" ours="Negative" />
+</div>
+</Wide>
+
+The last one is a failure, and an instructive one. The description mentions *"thick white
+steam is billowing from the smokestack"*, which appears to outweigh *"the overall scene
+captures a blend of industrial heritage and natural beauty"*. When neutral context sits
+beside a localised cue with negative associations, the prediction becomes sensitive to how
+that cue gets verbalised.
+
+## Why it works: the description as an explanation
+
+Because the intermediate representation is text, you can read why a prediction came out the
+way it did — and compare it against the perception tags human annotators left behind. The
+examples below are GPT-4o mini descriptions under ⟨σ₅, P₅⟩.
+
+<CueRow
+  src={cueWaterfall}
+  alt="A waterfall surrounded by dense green vegetation with people swimming at its base."
+  quotes={["beautiful waterfall surrounded by lush greenery", "people are swimming and enjoying the coolness of the water", "tranquil and inviting atmosphere"]}
+  cues={["nature", "leisure", "relaxation", "vibrant colors", "tourism"]}
+  human={["Pleasant environment", "Leisure/Fun/Rest", "Nature", "Colors", "Tourist Attractions"]}
+  truth="Positive"
+  predicted="Positive"
+/>
+
+<CueRow
+  src={cueGarbage}
+  alt="Overflowing garbage bins with litter scattered on the ground around them."
+  quotes={["overflowing garbage bins", "the area around the bins is littered with various pieces of garbage", "neglected or low-maintenance environment", "sense of abandonment"]}
+  cues={["trash", "neglect", "abandonment", "urban degradation"]}
+  human={["Lack of Maintenance", "Trash", "Sadness"]}
+  truth="Negative"
+  predicted="Negative"
+/>
+
+<CueRow
+  src={cueKayak}
+  alt="A kayak on calm blue coastal water seen from above."
+  quotes={["serene coastal scene", "beautiful shade of blue", "peaceful solitude in nature", "perfect for kayaking and enjoying the outdoors"]}
+  cues={["calmness", "nature", "sports", "leisure", "panoramic scenery"]}
+  human={["Pleasant environment", "Nature", "Sports", "Leisure/Fun/Rest"]}
+  truth="Positive"
+  predicted="Positive"
+/>
+
+<CueRow
+  src={cueDisaster}
+  alt="A partially destroyed building with rubble and debris covering the street in front of it."
+  quotes={["partially destroyed and surrounded by debris", "street littered with rubble", "smoke and dust", "overall atmosphere appears somber and tense"]}
+  cues={["destruction", "accident", "tension", "debris", "tragedy"]}
+  human={["Debris/Destruction", "Morbid", "Accident"]}
+  truth="Negative"
+  predicted="Negative"
+/>
+
+<CueRow
+  src={cueCity}
+  alt="An ordinary city street under an overcast sky, in muted tones."
+  quotes={["cloudy sky", "muted tone", "typical day in a city", "overall atmosphere is calm and somewhat quiet"]}
+  cues={["neutrality", "ordinary urban setting", "low emotional intensity"]}
+  human={["Everyday image", "Meaningless", "It has positive and negative elements"]}
+  truth="Neutral"
+  predicted="Neutral"
+/>
+
+## Limitations
+
+The pipeline inherits everything wrong with its descriptions. Noisy, incomplete or
+hallucinated text propagates straight into the classifier, and small differences in emphasis
+or wording can move the final label — most visibly in ambiguous or context-dependent scenes.
+Sentiment labels themselves are subjective and carry annotator and cultural bias, which
+affects training and evaluation alike. And part of the analysis depends on a proprietary
+model (GPT-4o mini), whose availability and behaviour may change.
+
+The benchmark comparison is also deliberately scoped: the goal is to characterise
+description-mediated reasoning under one unified protocol, not to exhaustively compare every
+multimodal fusion architecture in the literature.
+
+## Data and models
+
+Everything needed to reproduce or extend the study is released on the Hugging Face Hub under
+CC-BY-4.0. The PerceptSent source images themselves are not redistributed.
+
+### Dataset — descriptions, labels and every result
+
+<SmallCaps>[huggingface.co/datasets/Neemias/multimodal-LLMs-See-Sentiment](https://huggingface.co/datasets/Neemias/multimodal-LLMs-See-Sentiment)</SmallCaps>
+
+| folder | contents |
+| :--- | :--- |
+| `inputs/` | MLLM-generated descriptions paired with sentiment labels, one folder per MLLM |
+| `captions/` | raw Task-1 direct-classification outputs |
+| `splits/` | the legacy fixed train / validation / test split |
+| `results/` | per-fold predictions, training curves and metrics for all 141 experiments |
+
+Files follow `percept_dataset_alpha{sigma}_{problem}.csv` with columns `id, text, sentiment`,
+where `text` is the MLLM description. The release covers descriptions from six MLLMs —
+beyond the three studied in the paper it also includes Gemini 2.5 Flash, Phi-4 vision and
+Gemma-4.
+
+```python
+from datasets import load_dataset
+
+data = load_dataset(
+    "Neemias/multimodal-LLMs-See-Sentiment",
+    data_files="inputs/gpt4-openai-classify/percept_dataset_alpha5_p3.csv",
+)
+```
+
+### Models — the trained classifiers
+
+<SmallCaps>[huggingface.co/Neemias/multimodal-LLMs-See-Sentiment](https://huggingface.co/Neemias/multimodal-LLMs-See-Sentiment)</SmallCaps>
+
+The trained sentiment classifiers are published as fp16 safetensors, laid out by the
+configuration that produced them:
+
+```
+{caption_mllm}/{backbone}/{problem}/sigma{n}/{finetuned|not_finetuned}/
+    model.safetensors
+    config.json     # base model, id2label, source SHA-256, 5-fold scores
+```
+
+Each `config.json` records the 5-fold $F$-score that checkpoint achieved, so the model repo
+and the result CSVs in the dataset repo cross-reference each other. The paper's headline
+configuration is `gpt4-openai-classify/modernbert/p3/sigma5/finetuned`.
+
+Not published, because the weights were never retained: the LLaMA-3 qLoRA adapters, the Swin
+baseline, and a few BART σ₅ cells. Their result CSVs are in the dataset repo regardless.
+
+### Running it
+
+```bash
+git clone https://github.com/neemiasbsilva/multimodal-LLMs-see-sentiment.git
+cd multimodal-LLMs-see-sentiment
+uv sync
+
+mllmsent hub pull-checkpoint openai-modernbert-p3-sigma5
+mllmsent predict -- \
+    --model_name modern-bert \
+    --checkpoint_path checkpoints/best_checkpoint_gpt4-openai-classify_modernbert_p3_sigma5_finetuned.pt \
+    --model_path answerdotai/ModernBERT-large \
+    --input_file your_descriptions.csv \
+    --output_file predictions.csv \
+    --num_classes 3
+```
+
+Reproducing a cell of the experiment matrix end to end:
+
+```bash
+mllmsent caption --mllm openai --sigma 5 --resume      # Task 2, descriptions
+mllmsent train openai-modernbert-p3-sigma5 --gpu 0     # Task 2b, fine-tune
+mllmsent evaluate kfold -- --model openai --tasks 1 2a 2b
+mllmsent evaluate stats                                # Holm-corrected t-tests
+```
+
+## BibTeX
+
+```bibtex
+@misc{dasilva2026multimodalllmssentiment,
+      title={Multimodal LLMs See Sentiment},
+      author={Neemias B. da Silva and John Harrison and Rodrigo Minetto and Myriam R. Delgado and Bogdan T. Nassu and Thiago H. Silva},
+      year={2026},
+      eprint={2508.16873},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2508.16873},
+}
+```
+
+## Credits
+
+Figures and image samples on this page are taken from the paper. PerceptSent images are
+distributed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); DeepSent images
+come from the [DeepSent repository](https://github.com/imatge-upc/sentiment-2017-imavis)
+under the MIT License. Faces were blurred in the original figures. Code and Hub artifacts are
+CC-BY-4.0; the base models keep their own licenses.
