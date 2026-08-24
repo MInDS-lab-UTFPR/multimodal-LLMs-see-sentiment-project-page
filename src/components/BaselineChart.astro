@@ -1,0 +1,270 @@
+---
+type Bar = { label: string; value: number; ci: number; ours?: boolean };
+
+interface Props {
+  panels: { setup: string; bars: Bar[] }[];
+}
+
+const { panels } = Astro.props;
+
+const W = 420;
+const H = 260;
+const PAD_L = 34;
+const PAD_R = 10;
+const PAD_T = 22;
+const PAD_B = 58;
+
+const plotW = W - PAD_L - PAD_R;
+const plotH = H - PAD_T - PAD_B;
+
+const y = (v: number) => PAD_T + plotH - (v / 100) * plotH;
+const ticks = [0, 25, 50, 75, 100];
+
+const format = (v: number) =>
+  Number.isInteger(v * 10) ? v.toFixed(1) : v.toFixed(2);
+---
+
+<figure class="viz not-prose my-8">
+  <div class="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+    {
+      panels.map((panel) => {
+        const band = plotW / panel.bars.length;
+        const barW = Math.min(38, band - 18);
+        return (
+          <div>
+            <svg
+              viewBox={`0 0 ${W} ${H}`}
+              role="img"
+              aria-label={`F-score by method for ${panel.setup}`}
+              class="w-full"
+            >
+              {ticks.map((t) => (
+                <>
+                  <line
+                    x1={PAD_L}
+                    x2={W - PAD_R}
+                    y1={y(t)}
+                    y2={y(t)}
+                    class={t === 0 ? "viz-axis" : "viz-grid"}
+                    stroke-width="1"
+                  />
+                  <text
+                    x={PAD_L - 8}
+                    y={y(t) + 4}
+                    text-anchor="end"
+                    class="viz-tick"
+                  >
+                    {t}
+                  </text>
+                </>
+              ))}
+
+              {panel.bars.map((bar, i) => {
+                const cx = PAD_L + band * i + band / 2;
+                const top = y(bar.value);
+                const hi = y(Math.min(100, bar.value + bar.ci));
+                const lo = y(bar.value - bar.ci);
+                return (
+                  <>
+                    <rect
+                      x={cx - barW / 2}
+                      y={top}
+                      width={barW}
+                      height={y(0) - top}
+                      rx="4"
+                      class={bar.ours ? "viz-bar-ours" : "viz-bar-base"}
+                    />
+                    <rect
+                      x={cx - barW / 2}
+                      y={y(0) - 4}
+                      width={barW}
+                      height="4"
+                      class={bar.ours ? "viz-bar-ours" : "viz-bar-base"}
+                    />
+                    <line
+                      x1={cx}
+                      x2={cx}
+                      y1={hi}
+                      y2={lo}
+                      class="viz-ci"
+                      stroke-width="1.5"
+                    />
+                    <line
+                      x1={cx - 5}
+                      x2={cx + 5}
+                      y1={hi}
+                      y2={hi}
+                      class="viz-ci"
+                      stroke-width="1.5"
+                    />
+                    <line
+                      x1={cx - 5}
+                      x2={cx + 5}
+                      y1={lo}
+                      y2={lo}
+                      class="viz-ci"
+                      stroke-width="1.5"
+                    />
+                    <text
+                      x={cx}
+                      y={hi - 7}
+                      text-anchor="middle"
+                      class={bar.ours ? "viz-value-ours" : "viz-value"}
+                    >
+                      {format(bar.value)}
+                    </text>
+                    <text
+                      x={cx}
+                      y={y(0) + 18}
+                      text-anchor="middle"
+                      class="viz-cat"
+                    >
+                      {bar.label.split(" ")[0]}
+                    </text>
+                    {bar.label.split(" ").length > 1 && (
+                      <text
+                        x={cx}
+                        y={y(0) + 31}
+                        text-anchor="middle"
+                        class="viz-cat"
+                      >
+                        {bar.label.split(" ").slice(1).join(" ")}
+                      </text>
+                    )}
+                  </>
+                );
+              })}
+
+              <text
+                x={W / 2}
+                y={H - 8}
+                text-anchor="middle"
+                class="viz-panel-title"
+              >
+                {panel.setup}
+              </text>
+            </svg>
+          </div>
+        );
+      })
+    }
+  </div>
+
+  <div class="mt-1 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+    <span class="viz-legend"
+      ><span class="viz-swatch viz-swatch-base"></span>Baseline</span
+    >
+    <span class="viz-legend"
+      ><span class="viz-swatch viz-swatch-ours"></span>MLLMsent (ours)</span
+    >
+    <span class="viz-legend">
+      <svg width="14" height="14" aria-hidden="true" class="shrink-0">
+        <line x1="7" x2="7" y1="1" y2="13" class="viz-ci" stroke-width="1.5" />
+        <line x1="3" x2="11" y1="1" y2="1" class="viz-ci" stroke-width="1.5" />
+        <line x1="3" x2="11" y1="13" y2="13" class="viz-ci" stroke-width="1.5" />
+      </svg>
+      95% confidence interval
+    </span>
+  </div>
+
+  <figcaption class="viz-caption">
+    <slot name="caption" />
+  </figcaption>
+</figure>
+
+<style>
+  .viz {
+    --viz-ours: #2a78d6;
+    --viz-base: #898781;
+    --viz-grid: #e1e0d9;
+    --viz-axis: #c3c2b7;
+    --viz-ink: #0b0b0b;
+    --viz-muted: #6b6a65;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :global([data-theme="device"]) .viz {
+      --viz-ours: #3987e5;
+      --viz-base: #898781;
+      --viz-grid: #2c2c2a;
+      --viz-axis: #383835;
+      --viz-ink: #ffffff;
+      --viz-muted: #a3a29b;
+    }
+  }
+
+  :global([data-theme="dark"]) .viz {
+    --viz-ours: #3987e5;
+    --viz-base: #898781;
+    --viz-grid: #2c2c2a;
+    --viz-axis: #383835;
+    --viz-ink: #ffffff;
+    --viz-muted: #a3a29b;
+  }
+
+  .viz-bar-ours {
+    fill: var(--viz-ours);
+  }
+  .viz-bar-base {
+    fill: var(--viz-base);
+  }
+  .viz-grid {
+    stroke: var(--viz-grid);
+  }
+  .viz-axis {
+    stroke: var(--viz-axis);
+  }
+  .viz-ci {
+    stroke: var(--viz-ink);
+    opacity: 0.75;
+  }
+  .viz-tick,
+  .viz-cat {
+    fill: var(--viz-muted);
+    font-size: 11px;
+  }
+  .viz-tick {
+    font-variant-numeric: tabular-nums;
+  }
+  .viz-value {
+    fill: var(--viz-muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .viz-value-ours {
+    fill: var(--viz-ink);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .viz-panel-title {
+    fill: var(--viz-ink);
+    font-size: 13px;
+  }
+
+  .viz-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--viz-muted);
+  }
+  .viz-swatch {
+    display: inline-block;
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 0.2rem;
+  }
+  .viz-swatch-ours {
+    background: var(--viz-ours);
+  }
+  .viz-swatch-base {
+    background: var(--viz-base);
+  }
+  .viz-caption {
+    margin-top: 0.75rem;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--viz-muted);
+  }
+</style>

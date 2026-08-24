@@ -1,0 +1,55 @@
+---
+import { Picture } from "astro:assets";
+
+interface Props {
+  src: ImageMetadata;
+  alt: string;
+  truth: string;
+  baselineName: string;
+  baseline: string;
+  ours: string;
+}
+
+const { src, alt, truth, baselineName, baseline, ours } = Astro.props;
+const oursCorrect = ours === truth;
+---
+
+<div class="not-prose flex flex-col gap-3">
+  <Picture
+    class="aspect-[4/3] w-full rounded-lg object-cover"
+    src={src}
+    alt={alt}
+    width={640}
+    height={480}
+    formats={["avif"]}
+    fit="cover"
+  />
+  <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+    <dt class="text-zinc-500 dark:text-zinc-400">Ground truth</dt>
+    <dd class="font-medium text-zinc-800 dark:text-zinc-100">{truth}</dd>
+
+    <dt class="text-zinc-500 dark:text-zinc-400">{baselineName}</dt>
+    <dd
+      class:list={[
+        baseline === truth
+          ? "text-zinc-800 dark:text-zinc-100"
+          : "text-zinc-500 line-through dark:text-zinc-400",
+      ]}
+    >
+      {baseline}
+    </dd>
+
+    <dt class="text-zinc-500 dark:text-zinc-400">MLLMsent</dt>
+    <dd
+      class:list={[
+        "font-medium",
+        oursCorrect
+          ? "text-green-700 dark:text-green-300"
+          : "text-amber-700 dark:text-amber-300",
+      ]}
+    >
+      {ours}
+      {oursCorrect ? "✓" : "✗"}
+    </dd>
+  </dl>
+</div>
